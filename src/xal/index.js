@@ -468,7 +468,9 @@ export default class Xal {
           );
         } catch (e) {
           log.error('[getStreamingToken] fallback error:', e);
-          throw e;
+          // No xCloud access (no Game Pass Ultimate / unsupported region):
+          // keep logging in so console streaming (xHome) still works.
+          this._xcloudToken = null;
         }
       }
     }
