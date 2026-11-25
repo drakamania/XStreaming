@@ -1,0 +1,62 @@
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Pick Xcode 16
+        run: |
+          ls -d /Applications/Xcode*.app
+          for v in 16.2 16.1 16.0 16.4 16.3; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              sudo xcode-select -s "/Applications/Xcode_$v.app"; break
+            fi
+          done
+          xcodebuild -version
+
+      - name: Install JS dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build JS bundle
+        run: npx react-native bundle --platform ios --dev false --entry-file index.js --bundle-output ios/bundle/main.jsbundle --assets-dest ios/bundle
+
+      - name: Install pods
+        working-directory: ios
+        run: pod install
+
+      - name: Build app (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild -workspace XStreaming.xcworkspace -scheme XStreaming \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > xcodebuild.log 2>&1 || { grep -E " error:|error: " xcodebuild.log | head -60; tail -40 xcodebuild.log; exit 1; }
+          tail -3 xcodebuild.log
+
+      - name: Package IPA
+        run: |
+          mkdir -p out/Payload
+          cp -R ios/build/Build/Products/Release-iphoneos/XStreaming.app out/Payload/
+          cd out && zip -qry XStreaming-unsigned.ipa Payload && ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XStreaming-unsigned-ipa
+          path: out/XStreaming-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: xcodebuild-log
+          path: ios/xcodebuild.log
