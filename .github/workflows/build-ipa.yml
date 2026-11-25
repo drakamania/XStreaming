@@ -5,7 +5,11 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -13,6 +17,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+
+      - uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ matrix.os }}-${{ hashFiles('ios/Podfile.lock') }}
 
       - name: Pick Xcode 16
         run: |
@@ -52,11 +62,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: XStreaming-unsigned-ipa
+          name: XStreaming-unsigned-ipa-${{ matrix.os }}
           path: out/XStreaming-unsigned.ipa
 
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: xcodebuild-log
+          name: xcodebuild-log-${{ matrix.os }}
           path: ios/xcodebuild.log
