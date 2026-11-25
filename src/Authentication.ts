@@ -1,3 +1,29 @@
+import { Alert, NativeModules } from 'react-native';
+
+function showAuthError(step: string, error: any) {
+  try {
+    const xm: any = NativeModules.XalManager;
+    let keyInfo = 'XalManager missing';
+    if (xm) {
+      let kx = '';
+      try { kx = xm.getKeyX ? xm.getKeyX() : ''; } catch (e) { kx = 'getKeyX threw'; }
+      keyInfo = 'signing key: ' + (kx ? 'ok' : 'EMPTY');
+    }
+    const res = error && error.response;
+    const parts = [
+      'Step: ' + step,
+      'Message: ' + (error && error.message ? error.message : String(error)),
+      res ? 'HTTP ' + res.status + ' ' + (res.config && res.config.url ? res.config.url : '') : 'No HTTP response',
+      res && res.data ? 'Body: ' + JSON.stringify(res.data).slice(0, 600) : '',
+      res && res.headers && res.headers['x-err'] ? 'x-err: ' + res.headers['x-err'] : '',
+      keyInfo,
+    ].filter(Boolean);
+    Alert.alert('Login error (diagnostic)', parts.join('\n\n'));
+  } catch (e) {
+    Alert.alert('Login error (diagnostic)', String(error));
+  }
+}
+
 import Xal from './xal';
 import TokenStore from './xal/tokenstore';
 import { debugFactory } from './utils/debug';
@@ -73,6 +99,7 @@ export default class Authentication {
         .catch(error => {
           log.error('[startSilentFlow] Silent flow error:', error);
           // 失败时清空 TokenStore 让前端重新触发完整登录流程
+          showAuthError('startSilentFlow: Silent flow error:', error);
           this._tokenStore.clear();
         });
       return;
@@ -97,6 +124,7 @@ export default class Authentication {
                   '[startSilentFlow] getWebToken after refresh error:',
                   webError,
                 );
+                showAuthError('startSilentFlow: getWebToken after refresh error:', webError);
                 this._tokenStore.clear();
               });
           })
@@ -105,12 +133,14 @@ export default class Authentication {
               '[startSilentFlow] getStreamingToken after refresh error:',
               streamError,
             );
+            showAuthError('startSilentFlow: getStreamingToken after refresh error:', streamError);
             this._tokenStore.clear();
           });
       })
       .catch(refreshError => {
         log.error('[startSilentFlow] refreshTokens failed:', refreshError);
         // 清除可能的无效 token 让前端重新发起登录
+        showAuthError('startSilentFlow: refreshTokens failed:', refreshError);
         this._tokenStore.clear();
       });
   }
@@ -135,12 +165,14 @@ export default class Authentication {
         } else {
           log.warn('[startAuthflow] authenticateUser returned false (no auth).');
           // 可能用户取消登录等情况
+          showAuthError('startAuthflow: no code/state in redirect URL', new Error(String(redirectUri).slice(0, 300)));
           this._tokenStore.clear();
         }
       })
       .catch(error => {
         // 明确捕获错误
         log.error('[startAuthflow] Authentication failed:', error);
+        showAuthError('startAuthflow: Authentication failed:', error);
         this._tokenStore.clear();
       });
   }
